@@ -20,11 +20,22 @@ const HEADERS = {
   sales:   ['sale_id', 'date', 'customer', 'item', 'qty', 'unit_price', 'subtotal', 'note', 'client_id']
 };
 
+// ── 驗證：token（擋機器人）＋ 使用者密碼（真正的門鎖，存 Script Properties，不在前端）──
+// 回傳錯誤 response 代表未通過；回傳 null 代表通過。
+function checkAuth_(e) {
+  if (e.parameter.token !== API_TOKEN) return jsonErr('unauthorized');
+  const stored = PropertiesService.getScriptProperties().getProperty('APP_PASSWORD');
+  if (!stored) return jsonErr('no_password_set');      // 尚未設密碼 → 提醒去設
+  if ((e.parameter.pw || '') !== stored) return jsonErr('bad_password');
+  return null;
+}
+
 // ── 路由 ────────────────────────────────────────
 function doGet(e) {
-  if (e.parameter.token !== API_TOKEN) return jsonErr('unauthorized');
+  const auth = checkAuth_(e); if (auth) return auth;
   try {
     switch (e.parameter.action) {
+      case 'login':        return jsonOk({ ok: true });   // 密碼正確即回 ok（給鎖畫面驗證用）
       case 'getCatalog':   return jsonOk(getCatalog());
       case 'getSales':     return jsonOk(getSales(e));
       case 'getCustomers': return jsonOk(getCustomers());
@@ -34,7 +45,7 @@ function doGet(e) {
 }
 
 function doPost(e) {
-  if (e.parameter.token !== API_TOKEN) return jsonErr('unauthorized');
+  const auth = checkAuth_(e); if (auth) return auth;
   const data = e.postData ? JSON.parse(e.postData.contents) : {};
   try {
     switch (e.parameter.action) {

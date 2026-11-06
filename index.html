@@ -152,7 +152,7 @@ async function delItem(){
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),1800); }
 document.getElementById('q').addEventListener('input', render);
 document.getElementById('editModal').addEventListener('click', e=>{ if(e.target.id==='editModal') closeEdit(); });
-load();
+API.ensureAuth().then(load);
 </script>
 </body>
 </html>

@@ -134,7 +134,7 @@ async function submitSale(){
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),1800); }
-renderLines(); load();
+renderLines(); API.ensureAuth().then(load);
 </script>
 </body>
 </html>
