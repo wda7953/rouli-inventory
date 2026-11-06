@@ -17,7 +17,7 @@
 
 ## 部署步驟
 1. 建一份新的 Google Sheet（名稱隨意，例「柔力進銷存」）。
-2. 該 Sheet →「擴充功能 → Apps Script」，把 `apps-script.gs` 全部貼上。
+2. 該 Sheet →「擴充功能 → Apps Script」，把 `apps-script.gs` 全部貼上；再新增一個檔案把 `seed.gs` 貼上（seed.gs 含客戶名字與成本，不在 GitHub，從本機資料夾開）。
 3. 在編輯器選函式 `seedCatalog` 執行（授權），再選 `seedSales` 執行 → 灌入 PDF 資料。
 4. 右上「部署 → 新增部署作業 → 類型選 網頁應用程式」，執行身分=我、存取權=任何人，部署取得網址。
 5. 把網址貼進 `js/api.js` 的 `API_URL`，push。
