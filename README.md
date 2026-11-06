@@ -23,6 +23,7 @@
 5. 把網址貼進 `js/api.js` 的 `API_URL`，push。
 6. GitHub repo → Settings → Pages → 來源 main 分支，網址即 `https://wda7953.github.io/rouli-inventory/`。
 
-## 待補（seed 時未確認）
-- 月熊整批是否買下第 1 頁全品項（目前第 1 頁當總目錄，月熊購買另計）。
-- 順哥、Chris 的實際購買品項（原單只有金額）。
+## 待補 / 待核對
+- 月熊是客戶，但無確定購買明細（非整批買第 1 頁、第 5 頁 LOTUS 無收款金額），暫未列入 seed。
+- Chris 的 $350 單（防爆瑜珈球-M）低於成本 $480，數字待 olan 核對。
+- 順哥資料遺失，忽略。
