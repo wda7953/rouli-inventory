@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="柔力進銷存">
+<title>柔力進銷存 · 器材目錄</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="head">
+  <div class="brand">柔力 ROULI</div>
+  <h1>器材目錄</h1>
+  <div class="meta" id="meta">—</div>
+</header>
+
+<div class="wrap">
+  <input class="search" id="q" placeholder="搜尋品名…" autocomplete="off">
+  <div class="chips" id="chips"></div>
+  <div id="list"><div class="loading">載入中…</div></div>
+  <button class="btn btn-ghost" style="width:100%;margin:6px 0 20px" onclick="openEdit()">＋ 新增器材</button>
+</div>
+
+<!-- 新增/編輯 器材 -->
+<div class="modal" id="editModal">
+  <div class="sheet">
+    <h3 id="editTitle">新增器材</h3>
+    <div class="field"><label>品名</label><input class="input" id="f-name"></div>
+    <div class="field"><label>分類</label><input class="input" id="f-category" list="catList" placeholder="例：按摩放鬆"></div>
+    <datalist id="catList"></datalist>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="field"><label>定價（售價）</label><input class="input" id="f-list" type="number" inputmode="numeric"></div>
+      <div class="field"><label>成本（進價）</label><input class="input" id="f-cost" type="number" inputmode="numeric"></div>
+      <div class="field"><label>一般售價</label><input class="input" id="f-normal" type="number" inputmode="numeric"></div>
+      <div class="field"><label>安信大家庭</label><input class="input" id="f-anxin" type="number" inputmode="numeric"></div>
+    </div>
+    <div class="field"><label>備註</label><input class="input" id="f-note" placeholder="顏色、規格…"></div>
+    <button class="btn btn-primary" id="saveBtn" onclick="saveItem()">儲存</button>
+    <div style="text-align:center;margin-top:12px">
+      <button class="btn-danger" id="delBtn" style="display:none" onclick="delItem()">刪除此器材</button>
+      <button class="btn-danger" onclick="closeEdit()" style="color:var(--sub)">取消</button>
+    </div>
+  </div>
+</div>
+
+<nav class="nav">
+  <a href="index.html" class="on"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16"/></svg>目錄</a>
+  <a href="sale.html"><svg viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.5 12h11l2-8H6"/></svg>新增銷售</a>
+  <a href="customers.html"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></svg>客戶</a>
+</nav>
+<div class="toast" id="toast"></div>
+
+<script src="js/api.js"></script>
+<script>
+let ITEMS = [], CAT = '全部', editingId = null;
+
+function num(v){ return v==='' || v==null ? '' : Number(v); }
+
+function render(){
+  const q = document.getElementById('q').value.trim();
+  let items = ITEMS.filter(it =>
+    (CAT==='全部' || it.category===CAT) &&
+    (!q || String(it.name).includes(q))
+  );
+  const list = document.getElementById('list');
+  if(!items.length){ list.innerHTML='<div class="empty">沒有符合的器材</div>'; return; }
+  list.innerHTML = items.map(it => {
+    const list_=num(it.list), cost=num(it.cost);
+    const margin = (list_!=='' && cost!=='') ? list_-cost : '';
+    const mpct = (margin!=='' && list_) ? Math.round(margin/list_*100) : '';
+    return `<div class="card"><div class="item" onclick="openEdit('${it.id}')">
+      <div class="row1">
+        <span><span class="name">${esc(it.name)}</span></span>
+        <span class="price">${it.list!==''&&it.list!=null?API.money(it.list):'—'}</span>
+      </div>
+      <div class="sub"><span class="cat">${esc(it.category||'')}</span>
+        ${it.note?`<span>${esc(it.note)}</span>`:''}</div>
+      <div class="pricegrid">
+        <div><div class="k">定價</div><div class="v">${fmt(it.list)}</div></div>
+        <div><div class="k">成本</div><div class="v">${fmt(it.cost)}</div></div>
+        <div><div class="k">一般售價</div><div class="v accent">${fmt(it.normal)}</div></div>
+        <div><div class="k">安信大家庭</div><div class="v accent">${fmt(it.anxin)}</div></div>
+      </div>
+    </div>
+    ${margin!==''?`<div class="margin">毛利（定價−成本） <b>${API.money(margin)}</b>${mpct!==''?`（${mpct}%）`:''}</div>`:''}
+    </div>`;
+  }).join('');
+}
+function fmt(v){ return (v===''||v==null)?'—':API.money(v); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function buildChips(){
+  const cats = ['全部', ...[...new Set(ITEMS.map(i=>i.category).filter(Boolean))]];
+  document.getElementById('chips').innerHTML = cats.map(c=>
+    `<span class="chip ${c===CAT?'on':''}" onclick="setCat('${c}')">${esc(c)}</span>`).join('');
+  document.getElementById('catList').innerHTML = cats.filter(c=>c!=='全部').map(c=>`<option value="${esc(c)}">`).join('');
+}
+function setCat(c){ CAT=c; buildChips(); render(); }
+
+async function load(){
+  const cached = API.cacheGet('catalog');
+  if(cached){ ITEMS=cached; buildChips(); render(); updateMeta(); }
+  try{
+    const r = await API.apiGet('getCatalog');
+    if(r.items){ ITEMS=r.items; API.cacheSet('catalog', ITEMS); buildChips(); render(); updateMeta(); }
+    else if(r.error) toast('讀取失敗：'+r.error);
+  }catch(e){ if(!cached) document.getElementById('list').innerHTML='<div class="empty">連線逾時，下拉重試</div>'; }
+}
+function updateMeta(){ document.getElementById('meta').textContent = `共 ${ITEMS.length} 項器材`; }
+
+// ── 新增/編輯 ──
+function openEdit(id){
+  editingId = id || null;
+  const it = id ? ITEMS.find(x=>x.id===id) : {};
+  document.getElementById('editTitle').textContent = id?'編輯器材':'新增器材';
+  document.getElementById('delBtn').style.display = id?'inline':'none';
+  f('name',it.name); f('category',it.category); f('list',it.list);
+  f('cost',it.cost); f('normal',it.normal); f('anxin',it.anxin); f('note',it.note);
+  document.getElementById('editModal').classList.add('on');
+}
+function f(k,v){ document.getElementById('f-'+k).value = (v==null?'':v); }
+function g(k){ return document.getElementById('f-'+k).value.trim(); }
+function closeEdit(){ document.getElementById('editModal').classList.remove('on'); }
+
+async function saveItem(){
+  const name = g('name'); if(!name){ toast('請填品名'); return; }
+  const payload = { name, category:g('category'), list:numOrBlank('list'),
+    cost:numOrBlank('cost'), normal:numOrBlank('normal'), anxin:numOrBlank('anxin'), note:g('note') };
+  const btn=document.getElementById('saveBtn'); btn.disabled=true; btn.textContent='儲存中…';
+  try{
+    let r;
+    if(editingId){ payload.id=editingId; r=await API.apiPost('updateItem',payload); }
+    else{ r=await API.apiPost('addItem',payload); }
+    if(r.ok){ toast('已儲存'); closeEdit(); load(); }
+    else toast('失敗：'+(r.error||''));
+  }catch(e){ toast('連線錯誤'); }
+  btn.disabled=false; btn.textContent='儲存';
+}
+function numOrBlank(k){ const v=g(k); return v===''?'':Number(v); }
+
+async function delItem(){
+  if(!editingId || !confirm('確定刪除此器材？')) return;
+  try{ const r=await API.apiPost('deleteItem',{id:editingId});
+    if(r.ok){ toast('已刪除'); closeEdit(); load(); } else toast('失敗：'+(r.error||'')); }
+  catch(e){ toast('連線錯誤'); }
+}
+
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),1800); }
+document.getElementById('q').addEventListener('input', render);
+document.getElementById('editModal').addEventListener('click', e=>{ if(e.target.id==='editModal') closeEdit(); });
+load();
+</script>
+</body>
+</html>

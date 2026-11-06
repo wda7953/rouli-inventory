@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>柔力進銷存 · 客戶</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="head">
+  <div class="brand">柔力 ROULI</div>
+  <h1 id="title">客戶紀錄</h1>
+  <div class="meta" id="meta">—</div>
+</header>
+
+<div class="wrap">
+  <div id="view"><div class="loading">載入中…</div></div>
+</div>
+
+<nav class="nav">
+  <a href="index.html"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16"/></svg>目錄</a>
+  <a href="sale.html"><svg viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.5 12h11l2-8H6"/></svg>新增銷售</a>
+  <a href="customers.html" class="on"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></svg>客戶</a>
+</nav>
+<div class="toast" id="toast"></div>
+
+<script src="js/api.js"></script>
+<script>
+let CUSTOMERS = [];
+
+async function loadList(){
+  document.getElementById('title').textContent='客戶紀錄';
+  const cached = API.cacheGet('customers');
+  if(cached){ CUSTOMERS=cached; renderList(); }
+  try{
+    const r=await API.apiGet('getCustomers');
+    if(r.customers){ CUSTOMERS=r.customers; API.cacheSet('customers',CUSTOMERS); renderList(); }
+  }catch(e){ if(!cached) document.getElementById('view').innerHTML='<div class="empty">連線逾時</div>'; }
+}
+function renderList(){
+  const total = CUSTOMERS.reduce((s,c)=>s+(Number(c.total)||0),0);
+  document.getElementById('meta').textContent = `${CUSTOMERS.length} 位客戶 · 累計 ${API.money(total)}`;
+  const v=document.getElementById('view');
+  if(!CUSTOMERS.length){ v.innerHTML='<div class="empty">還沒有銷售紀錄<br>到「新增銷售」記第一筆</div>'; return; }
+  v.innerHTML = CUSTOMERS.map(c=>`<div class="card"><div class="item" onclick="openCust('${esc(c.customer)}')">
+    <div class="row1"><span class="name">${esc(c.customer)}</span><span class="price">${API.money(c.total)}</span></div>
+    <div class="sub"><span>${c.orders} 單 · ${c.items} 項</span>${c.lastDate?`<span>最後 ${c.lastDate}</span>`:''}</div>
+  </div></div>`).join('');
+}
+
+async function openCust(name){
+  document.getElementById('title').textContent=name;
+  const v=document.getElementById('view'); v.innerHTML='<div class="loading">載入中…</div>';
+  document.getElementById('meta').innerHTML='';
+  try{
+    const r=await API.apiGet('getSales',{customer:name});
+    const lines=r.lines||[];
+    // 依 sale_id 分組
+    const groups={};
+    lines.forEach(l=>{ const k=l.sale_id||('_'+l._rowIndex); (groups[k]=groups[k]||[]).push(l); });
+    const grand=lines.reduce((s,l)=>s+(Number(l.subtotal)||0),0);
+    document.getElementById('meta').textContent = `共 ${Object.keys(groups).length} 單 · ${API.money(grand)}`;
+    let html = `<button class="btn btn-ghost" style="margin:0 0 12px" onclick="loadList()">‹ 返回客戶清單</button>`;
+    html += Object.entries(groups).map(([sid,g])=>{
+      const sum=g.reduce((s,l)=>s+(Number(l.subtotal)||0),0);
+      const date=g[0].date||'無日期'; const note=g[0].note||'';
+      return `<div class="card"><div style="padding:12px 15px">
+        <div class="row1"><span class="sub" style="margin:0">${date}</span><span class="price">${API.money(sum)}</span></div>
+        ${g.map(l=>`<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:14px;border-bottom:1px solid var(--line)">
+          <span>${esc(l.item)} ${Number(l.qty)>1?`<span style="color:var(--sub)">×${l.qty}</span>`:''}</span>
+          <span style="color:var(--sub)">${API.money(l.subtotal)}</span></div>`).join('')}
+        ${note?`<div class="sub" style="margin-top:8px">${esc(note)}</div>`:''}
+        ${sid.indexOf('_')!==0?`<div style="text-align:right;margin-top:8px"><button class="btn-danger" onclick="delSale('${sid}','${esc(name)}')">刪除此單</button></div>`:''}
+      </div></div>`;
+    }).join('');
+    v.innerHTML=html;
+  }catch(e){ v.innerHTML='<div class="empty">連線逾時</div>'; }
+}
+
+async function delSale(sid,name){
+  if(!confirm('確定刪除整張單？')) return;
+  try{ const r=await API.apiPost('deleteSale',{sale_id:sid});
+    if(r.ok){ toast('已刪除'); API.cacheSet('customers',null); openCust(name); }
+    else toast('失敗：'+(r.error||'')); }catch(e){ toast('連線錯誤'); }
+}
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),1800); }
+loadList();
+</script>
+</body>
+</html>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>柔力進銷存 · 新增銷售</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="head">
+  <div class="brand">柔力 ROULI</div>
+  <h1>新增銷售</h1>
+  <div class="meta">記一筆賣出，自動帶建議價</div>
+</header>
+
+<div class="wrap">
+  <div class="field">
+    <label>客戶</label>
+    <input class="input" id="customer" list="custList" placeholder="輸入或選擇客戶" autocomplete="off">
+    <datalist id="custList"></datalist>
+  </div>
+  <div class="field">
+    <label>日期</label>
+    <input class="input" id="date" type="date">
+  </div>
+
+  <label style="font-size:12px;color:var(--sub);font-weight:600">品項</label>
+  <div id="lines"></div>
+  <button class="btn btn-ghost" style="width:100%;margin-top:8px" onclick="openPick()">＋ 加入品項</button>
+
+  <div class="total"><span>本單合計</span><span class="big" id="total">$0</span></div>
+
+  <div class="field">
+    <label>備註（例：整單實收、折扣）</label>
+    <input class="input" id="note" placeholder="選填">
+  </div>
+  <button class="btn btn-primary" id="submitBtn" onclick="submitSale()" style="margin-bottom:24px">送出</button>
+</div>
+
+<!-- 挑品項 -->
+<div class="modal" id="pickModal">
+  <div class="sheet">
+    <h3>選擇品項</h3>
+    <input class="search" id="pq" placeholder="搜尋品名…" autocomplete="off">
+    <div id="pickList" style="margin-top:6px"></div>
+  </div>
+</div>
+
+<nav class="nav">
+  <a href="index.html"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16"/></svg>目錄</a>
+  <a href="sale.html" class="on"><svg viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.5 12h11l2-8H6"/></svg>新增銷售</a>
+  <a href="customers.html"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></svg>客戶</a>
+</nav>
+<div class="toast" id="toast"></div>
+
+<script src="js/api.js"></script>
+<script>
+let ITEMS = [], LINES = [];
+
+document.getElementById('date').value = new Date().toISOString().slice(0,10);
+
+async function load(){
+  const cat = API.cacheGet('catalog'); if(cat) ITEMS=cat;
+  try{ const r=await API.apiGet('getCatalog'); if(r.items){ ITEMS=r.items; API.cacheSet('catalog',ITEMS);} }catch(e){}
+  try{ const c=await API.apiGet('getCustomers');
+    if(c.customers) document.getElementById('custList').innerHTML =
+      c.customers.map(x=>`<option value="${esc(x.customer)}">`).join(''); }catch(e){}
+}
+
+function renderLines(){
+  const box=document.getElementById('lines');
+  box.innerHTML = LINES.map((ln,i)=>`<div class="lineitem">
+    <span class="ln-name">${esc(ln.item)}</span>
+    <input class="ln-q" type="number" inputmode="numeric" value="${ln.qty}" min="1" onchange="setLn(${i},'qty',this.value)">
+    <input class="ln-p" type="number" inputmode="numeric" value="${ln.unit_price}" onchange="setLn(${i},'unit_price',this.value)">
+    <button class="btn-danger" onclick="rmLn(${i})">✕</button>
+  </div>`).join('');
+  const total = LINES.reduce((s,l)=>s+(Number(l.qty)||0)*(Number(l.unit_price)||0),0);
+  document.getElementById('total').textContent = API.money(total);
+}
+function setLn(i,k,v){ LINES[i][k]=v; renderLines(); }
+function rmLn(i){ LINES.splice(i,1); renderLines(); }
+
+// ── 挑品項 ──
+function openPick(){
+  document.getElementById('pq').value='';
+  renderPick('');
+  document.getElementById('pickModal').classList.add('on');
+}
+function renderPick(q){
+  const list = ITEMS.filter(it=>!q || String(it.name).includes(q));
+  document.getElementById('pickList').innerHTML = list.map(it=>{
+    const price = it.normal!==''&&it.normal!=null ? it.normal : (it.list||0);
+    return `<div class="pick" onclick="addLine('${it.id}')">
+      <span class="pn">${esc(it.name)}</span>
+      <span class="pp">建議 ${API.money(price)}</span></div>`;
+  }).join('') || '<div class="empty">查無品項</div>';
+}
+function addLine(id){
+  const it=ITEMS.find(x=>x.id===id); if(!it) return;
+  const price = it.normal!==''&&it.normal!=null ? Number(it.normal) : (Number(it.list)||0);
+  LINES.push({ item:it.name, qty:1, unit_price:price });
+  document.getElementById('pickModal').classList.remove('on');
+  renderLines();
+}
+document.getElementById('pq').addEventListener('input', e=>renderPick(e.target.value.trim()));
+document.getElementById('pickModal').addEventListener('click', e=>{ if(e.target.id==='pickModal') e.currentTarget.classList.remove('on'); });
+
+// ── 送出 ──
+async function submitSale(){
+  const customer=document.getElementById('customer').value.trim();
+  if(!customer){ toast('請填客戶'); return; }
+  if(!LINES.length){ toast('請加入至少一個品項'); return; }
+  const payload = {
+    customer, date:document.getElementById('date').value,
+    note:document.getElementById('note').value.trim(),
+    client_id: API.genClientId(),
+    lines: LINES.map(l=>({ item:l.item, qty:Number(l.qty)||1, unit_price:Number(l.unit_price)||0 }))
+  };
+  const btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='送出中…';
+  try{
+    const r=await API.apiPost('addSale',payload);
+    if(r.ok){ toast('已記錄'); LINES=[]; renderLines();
+      document.getElementById('customer').value=''; document.getElementById('note').value='';
+      load(); }
+    else toast('失敗：'+(r.error||''));
+  }catch(e){ toast('連線錯誤，稍後重試'); }
+  btn.disabled=false; btn.textContent='送出';
+}
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),1800); }
+renderLines(); load();
+</script>
+</body>
+</html>
