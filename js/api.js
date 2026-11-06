@@ -1,5 +1,5 @@
 // 部署 Apps Script 後，把 Web App 網址填進來
-const API_URL = 'PASTE_WEB_APP_URL_HERE';
+const API_URL = 'https://script.google.com/macros/s/AKfycbxooYU3y5ogMBBGpoelXYWohPkTocmcrsvxMhWeLfysrQjP5B9Hr88Mjwi904IKBrI/exec';
 
 // 共享密鑰：擋隨機機器人用（必須跟後端 apps-script.gs 的 API_TOKEN 一致）
 // ⚠️ 真正的門鎖是下面的「使用者密碼」——存在後端 Script Properties，不在這份公開原始碼裡
