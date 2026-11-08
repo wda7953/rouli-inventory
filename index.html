@@ -47,6 +47,20 @@
   </div>
 </div>
 
+<!-- 勾選即時計算 -->
+<div class="calcbar" id="calcbar">
+  <div class="seg">
+    <button data-b="list" onclick="setBasis('list')">定價</button>
+    <button data-b="normal" onclick="setBasis('normal')" class="on">一般售價</button>
+    <button data-b="anxin" onclick="setBasis('anxin')">安信大家庭</button>
+  </div>
+  <div class="sum">
+    <span class="lbl">已選 <b id="calcCount">0</b> 項 · <span id="calcBasis">一般售價</span>
+      <button class="clr" onclick="clearSel()">清除</button></span>
+    <span class="amt" id="calcTotal">$0</span>
+  </div>
+</div>
+
 <nav class="nav">
   <a href="index.html" class="on"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16"/></svg>目錄</a>
   <a href="sale.html"><svg viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.5 12h11l2-8H6"/></svg>新增銷售</a>
@@ -57,6 +71,8 @@
 <script src="js/api.js"></script>
 <script>
 let ITEMS = [], CAT = '全部', editingId = null;
+let SEL = new Set(), BASIS = 'normal';
+const BASIS_LABEL = { list:'定價', normal:'一般售價', anxin:'安信大家庭' };
 
 function num(v){ return v==='' || v==null ? '' : Number(v); }
 
@@ -71,26 +87,44 @@ function render(){
   list.innerHTML = items.map(it => {
     const list_=num(it.list), cost=num(it.cost);
     const margin = (list_!=='' && cost!=='') ? list_-cost : '';
-    const mpct = (margin!=='' && list_) ? Math.round(margin/list_*100) : '';
-    return `<div class="card"><div class="item" onclick="openEdit('${it.id}')">
-      <div class="row1">
-        <span><span class="name">${esc(it.name)}</span></span>
-        <span class="price">${it.list!==''&&it.list!=null?API.money(it.list):'—'}</span>
+    const sel = SEL.has(it.id);
+    return `<div class="row ${sel?'sel':''}">
+      <input type="checkbox" class="chk" ${sel?'checked':''} onchange="toggleSel('${it.id}',this.checked)">
+      <div class="body" onclick="openEdit('${it.id}')">
+        <div class="r1"><span class="nm">${esc(it.name)}</span>${it.category?`<span class="tag">${esc(it.category)}</span>`:''}</div>
+        <div class="r2">
+          <span>成本 <b>${fmt(it.cost)}</b></span>
+          <span>一般 <b class="ac">${fmt(it.normal)}</b></span>
+          <span>安信 <b class="ac">${fmt(it.anxin)}</b></span>
+          ${margin!==''?`<span>毛利 <b>${API.money(margin)}</b></span>`:''}
+          ${it.note?`<span>${esc(it.note)}</span>`:''}
+        </div>
       </div>
-      <div class="sub"><span class="cat">${esc(it.category||'')}</span>
-        ${it.note?`<span>${esc(it.note)}</span>`:''}</div>
-      <div class="pricegrid">
-        <div><div class="k">定價</div><div class="v">${fmt(it.list)}</div></div>
-        <div><div class="k">成本</div><div class="v">${fmt(it.cost)}</div></div>
-        <div><div class="k">一般售價</div><div class="v accent">${fmt(it.normal)}</div></div>
-        <div><div class="k">安信大家庭</div><div class="v accent">${fmt(it.anxin)}</div></div>
-      </div>
-    </div>
-    ${margin!==''?`<div class="margin">毛利（定價−成本） <b>${API.money(margin)}</b>${mpct!==''?`（${mpct}%）`:''}</div>`:''}
+      <div class="amt"><div class="pr">${it.list!==''&&it.list!=null?API.money(it.list):'—'}</div><div class="pk">定價</div></div>
     </div>`;
   }).join('');
 }
 function fmt(v){ return (v===''||v==null)?'—':API.money(v); }
+
+// ── 勾選即時計算 ──
+function priceOf(it, basis){
+  let v = it[basis];
+  if(v==='' || v==null) v = it.list;        // 該價格空白→退回定價
+  return Number(v)||0;
+}
+function toggleSel(id,on){ if(on) SEL.add(id); else SEL.delete(id); render(); renderCalc(); }
+function setBasis(b){ BASIS=b; renderCalc(); }
+function clearSel(){ SEL.clear(); render(); renderCalc(); }
+function renderCalc(){
+  const bar=document.getElementById('calcbar');
+  if(!SEL.size){ bar.classList.remove('on'); document.body.classList.remove('calc-on'); return; }
+  bar.classList.add('on'); document.body.classList.add('calc-on');
+  let total=0; SEL.forEach(id=>{ const it=ITEMS.find(x=>x.id===id); if(it) total+=priceOf(it,BASIS); });
+  document.querySelectorAll('#calcbar .seg button').forEach(b=>b.classList.toggle('on',b.dataset.b===BASIS));
+  document.getElementById('calcCount').textContent=SEL.size;
+  document.getElementById('calcBasis').textContent=BASIS_LABEL[BASIS];
+  document.getElementById('calcTotal').textContent=API.money(total);
+}
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 function buildChips(){
@@ -103,10 +137,10 @@ function setCat(c){ CAT=c; buildChips(); render(); }
 
 async function load(){
   const cached = API.cacheGet('catalog');
-  if(cached){ ITEMS=cached; buildChips(); render(); updateMeta(); }
+  if(cached){ ITEMS=cached; buildChips(); render(); updateMeta(); renderCalc(); }
   try{
     const r = await API.apiGet('getCatalog');
-    if(r.items){ ITEMS=r.items; API.cacheSet('catalog', ITEMS); buildChips(); render(); updateMeta(); }
+    if(r.items){ ITEMS=r.items; API.cacheSet('catalog', ITEMS); buildChips(); render(); updateMeta(); renderCalc(); }
     else if(r.error) toast('讀取失敗：'+r.error);
   }catch(e){ if(!cached) document.getElementById('list').innerHTML='<div class="empty">連線逾時，下拉重試</div>'; }
 }
